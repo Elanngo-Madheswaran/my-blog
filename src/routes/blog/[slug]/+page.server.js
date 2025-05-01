@@ -1,30 +1,37 @@
 import { error } from '@sveltejs/kit';
-import fs from 'fs';
-import path from 'path';
-import matter from 'gray-matter';
+import { marked } from 'marked';
 
 export async function load({ params }) {
     try {
         const { slug } = params;
         
-        // Define paths to check for the content file
-        const mdPath = path.join(process.cwd(), 'static/content/blogs', `${slug}.md`);
-        const mdxPath = path.join(process.cwd(), 'static/content/blogs', `${slug}.mdx`);
-        
-        let filePath;
-        if (fs.existsSync(mdPath)) {
-            filePath = mdPath;
-        } else if (fs.existsSync(mdxPath)) {
-            filePath = mdxPath;
-        } else {
-            throw error(404, `Could not find post: ${slug}`);
+        // Import the markdown file directly
+        let postContent;
+        try {
+            postContent = await import(`/static/content/blogs/${slug}.md?raw`);
+        } catch (e) {
+            try {
+                postContent = await import(`/static/content/blogs/${slug}.mdx?raw`);
+            } catch (e2) {
+                throw error(404, `Could not find post: ${slug}`);
+            }
         }
         
-        // Read the file directly from the filesystem
-        const fileContent = fs.readFileSync(filePath, 'utf8');
+        // Extract and parse frontmatter
+        const content = postContent.default || postContent;
+        const frontmatterMatch = content.match(/---\r?\n([\s\S]*?)\r?\n---/);
+        const frontmatter = frontmatterMatch ? frontmatterMatch[1] : '';
+        const mainContent = content.replace(/---\r?\n[\\s\S]*?\r?\n---/, '').trim();
         
-        // Parse frontmatter and content
-        const { data: metadata, content } = matter(fileContent);
+        // Parse frontmatter
+        const metadata = {};
+        frontmatter.split('\n').forEach(line => {
+            const [key, ...valueParts] = line.split(':');
+            if (key && valueParts.length > 0) {
+                const value = valueParts.join(':').trim();
+                metadata[key.trim()] = value;
+            }
+        });
         
         return {
             metadata: {
@@ -33,7 +40,7 @@ export async function load({ params }) {
                 ...metadata,
                 slug
             },
-            content
+            content: mainContent
         };
     } catch (e) {
         console.error(e);

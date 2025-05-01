@@ -1,40 +1,37 @@
 import { json } from '@sveltejs/kit';
-import fs from 'fs';
-import path from 'path';
-import matter from 'gray-matter';
 
 export async function GET() {
   try {
-    // Get list of all files in the blogs directory
-    const postsDirectory = path.join(process.cwd(), 'static/content/blogs');
-    const filenames = fs.readdirSync(postsDirectory);
+    // Use import.meta.glob to get all markdown files
+    const postImports = import.meta.glob('/static/content/blogs/*.{md,mdx}', { eager: true, as: 'raw' });
     
-    const posts = filenames
-      .filter(filename => {
-        // Only include .md and .mdx files
-        return filename.endsWith('.md') || filename.endsWith('.mdx');
-      })
-      .map(filename => {
-        // Remove extension
-        const slug = filename.replace(/\.mdx?$/, '');
-        
-        // Read file content
-        const filePath = path.join(postsDirectory, filename);
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        
-        // Parse frontmatter
-        const { data } = matter(fileContent);
-        
-        // Return post metadata
-        return {
-          slug,
-          title: data.title || slug,
-          date: data.date,
-          excerpt: data.excerpt || '',
-          ...data
-        };
-      })
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const posts = Object.entries(postImports).map(([path, content]) => {
+      // Extract slug from path
+      const slug = path.split('/').pop().replace(/\.(md|mdx)$/, '');
+      
+      // Extract frontmatter with a simple regex approach
+      const frontmatterMatch = content.match(/---\r?\n([\s\S]*?)\r?\n---/);
+      const frontmatter = frontmatterMatch ? frontmatterMatch[1] : '';
+      
+      // Parse frontmatter
+      const metadata = {};
+      frontmatter.split('\n').forEach(line => {
+        const [key, ...valueParts] = line.split(':');
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join(':').trim();
+          metadata[key.trim()] = value;
+        }
+      });
+      
+      return {
+        slug,
+        title: metadata.title || slug,
+        date: metadata.date || new Date().toISOString().split('T')[0],
+        excerpt: metadata.excerpt || '',
+        ...metadata
+      };
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
     
     return json(posts);
   } catch (error) {
