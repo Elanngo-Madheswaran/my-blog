@@ -5,23 +5,26 @@ export async function load({ params }) {
     try {
         const { slug } = params;
         
-        // Import the markdown file directly
-        let postContent;
-        try {
-            postContent = await import(`/static/content/blogs/${slug}.md?raw`);
-        } catch (e) {
-            try {
-                postContent = await import(`/static/content/blogs/${slug}.mdx?raw`);
-            } catch (e2) {
-                throw error(404, `Could not find post: ${slug}`);
-            }
+        // Use import.meta.glob to get all markdown files
+        const posts = import.meta.glob('/static/content/blogs/*.{md,mdx}', { eager: true, as: 'raw' });
+        
+        // Find the matching post by slug
+        const filePath = Object.keys(posts).find(path => {
+            // Extract slug from file path
+            const fileSlug = path.split('/').pop().replace(/\.(md|mdx)$/, '');
+            return fileSlug === slug;
+        });
+        
+        if (!filePath) {
+            throw error(404, `Could not find post: ${slug}`);
         }
         
+        const content = posts[filePath];
+        
         // Extract and parse frontmatter
-        const content = postContent.default || postContent;
         const frontmatterMatch = content.match(/---\r?\n([\s\S]*?)\r?\n---/);
         const frontmatter = frontmatterMatch ? frontmatterMatch[1] : '';
-        const mainContent = content.replace(/---\r?\n[\\s\S]*?\r?\n---/, '').trim();
+        const mainContent = content.replace(/---\r?\n[\s\S]*?\r?\n---/, '').trim();
         
         // Parse frontmatter
         const metadata = {};
