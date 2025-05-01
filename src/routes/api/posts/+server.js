@@ -5,7 +5,7 @@ import matter from 'gray-matter';
 
 export async function GET() {
   try {
-    // Get list of all files in the static/content/blog directory
+    // Get list of all files in the blogs directory
     const postsDirectory = path.join(process.cwd(), 'static/content/blogs');
     const filenames = fs.readdirSync(postsDirectory);
     
